@@ -75,30 +75,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $clientName = 'Account #' . $accountNumber;
                 }
                 
-                // Get first admin user ID for ticket assignment
-                $assignedUserId = null;
-                try {
-                    $users = $api->get('users');
-                    foreach ($users as $user) {
-                        if (!empty($user['id'])) {
-                            $assignedUserId = (int)$user['id'];
-                            break;
-                        }
-                    }
-                } catch (Exception $ue) {
-                    if ($debugMode) $debugInfo .= "Could not get users. ";
-                }
-                
                 // Create ticket for the found client
+                // API requires: subject, clientId, and activity array with at least one comment
                 $ticketData = [
                     'subject' => 'Support Request: ' . substr($concern, 0, 100),
-                    'clientId' => (int)$foundClient['id']
+                    'clientId' => (int)$foundClient['id'],
+                    'activity' => [
+                        [
+                            'public' => true,
+                            'comment' => [
+                                'body' => $concern
+                            ]
+                        ]
+                    ]
                 ];
-                
-                // Add assignedUserId if available
-                if ($assignedUserId) {
-                    $ticketData['assignedUserId'] = $assignedUserId;
-                }
                 
                 if ($debugMode) $debugInfo .= "Creating ticket with: " . json_encode($ticketData) . "... ";
                 
@@ -106,36 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (isset($response['id'])) {
                     $ticketId = $response['id'];
-                    if ($debugMode) $debugInfo .= "Ticket #$ticketId created! Adding comment... ";
-                    
-                    // Add the concern as a comment to the ticket
-                    $commentAdded = false;
-                    $commentEndpoints = [
-                        'ticketing/tickets/' . $ticketId . '/comments',
-                        'ticketing/tickets/' . $ticketId . '/activity'
-                    ];
-                    
-                    foreach ($commentEndpoints as $commentEndpoint) {
-                        if ($commentAdded) break;
-                        
-                        // Try different field names for the comment body
-                        $fieldNames = ['body', 'content', 'message', 'text'];
-                        
-                        foreach ($fieldNames as $fieldName) {
-                            try {
-                                $commentData = [
-                                    'public' => true,
-                                    $fieldName => $concern
-                                ];
-                                $api->post($commentEndpoint, $commentData);
-                                $commentAdded = true;
-                                if ($debugMode) $debugInfo .= "Comment added via $commentEndpoint ($fieldName). ";
-                                break;
-                            } catch (Exception $ce) {
-                                if ($debugMode) $debugInfo .= "$commentEndpoint/$fieldName failed. ";
-                            }
-                        }
-                    }
+                    if ($debugMode) $debugInfo .= "Ticket #$ticketId created successfully! ";
                     
                     $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . $ticketId;
                     $messageType = 'success';
