@@ -78,10 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Create ticket for the found client (without message - add as comment after)
                 $ticketData = [
                     'clientId' => (int)$foundClient['id'],
-                    'subject' => 'Support Request from ' . $clientName
+                    'subject' => 'Support Request: ' . substr($concern, 0, 100),
+                    'status' => 0
                 ];
                 
-                if ($debugMode) $debugInfo .= "Creating ticket... ";
+                if ($debugMode) $debugInfo .= "Creating ticket with: " . json_encode($ticketData) . "... ";
                 
                 $response = $api->post('ticketing/tickets', $ticketData);
                 
