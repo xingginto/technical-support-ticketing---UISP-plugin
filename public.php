@@ -45,24 +45,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'Account number cannot be found.';
                 $messageType = 'error';
             } else {
+                // Get client name for subject
+                $clientName = '';
+                if (!empty($foundClient['firstName']) || !empty($foundClient['lastName'])) {
+                    $clientName = trim(($foundClient['firstName'] ?? '') . ' ' . ($foundClient['lastName'] ?? ''));
+                } elseif (!empty($foundClient['companyName'])) {
+                    $clientName = $foundClient['companyName'];
+                } else {
+                    $clientName = 'Account #' . $accountNumber;
+                }
+                
                 // Create ticket for the found client
                 $ticketData = [
-                    'clientId' => $foundClient['id'],
-                    'subject' => 'Support Request from ' . ($foundClient['firstName'] ?? '') . ' ' . ($foundClient['lastName'] ?? $foundClient['companyName'] ?? ''),
-                    'public' => true,
-                    'status' => 0, // Open
-                    'activity' => [
-                        [
-                            'public' => true,
-                            'content' => $concern
-                        ]
-                    ]
+                    'clientId' => (int)$foundClient['id'],
+                    'subject' => 'Support Request from ' . $clientName
                 ];
                 
                 $response = $api->post('ticketing/tickets', $ticketData);
                 
                 if (isset($response['id'])) {
-                    $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . $response['id'];
+                    // Add the concern as a comment/activity to the ticket
+                    $ticketId = $response['id'];
+                    
+                    try {
+                        $commentData = [
+                            'public' => true,
+                            'body' => $concern
+                        ];
+                        $api->post('ticketing/tickets/' . $ticketId . '/comments', $commentData);
+                    } catch (Exception $commentError) {
+                        // Try alternative field name
+                        try {
+                            $commentData = [
+                                'public' => true,
+                                'content' => $concern
+                            ];
+                            $api->post('ticketing/tickets/' . $ticketId . '/comments', $commentData);
+                        } catch (Exception $e2) {
+                            // Comment failed but ticket was created
+                        }
+                    }
+                    
+                    $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . $ticketId;
                     $messageType = 'success';
                     // Clear form on success
                     $accountNumber = '';
@@ -73,7 +97,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } catch (Exception $e) {
-            $message = 'An error occurred. Please try again later.';
+            $errorMsg = $e->getMessage();
+            // Show more helpful error for debugging
+            if (strpos($errorMsg, '404') !== false) {
+                $message = 'Ticketing system not available. Please contact support.';
+            } elseif (strpos($errorMsg, '401') !== false || strpos($errorMsg, '403') !== false) {
+                $message = 'Permission denied. Please contact support.';
+            } else {
+                $message = 'An error occurred. Please try again later.';
+            }
             $messageType = 'error';
         }
     }
