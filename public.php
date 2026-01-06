@@ -75,12 +75,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $clientName = 'Account #' . $accountNumber;
                 }
                 
-                // Create ticket for the found client (without message - add as comment after)
+                // Get first admin user ID for ticket assignment
+                $assignedUserId = null;
+                try {
+                    $users = $api->get('users');
+                    foreach ($users as $user) {
+                        if (!empty($user['id'])) {
+                            $assignedUserId = (int)$user['id'];
+                            break;
+                        }
+                    }
+                } catch (Exception $ue) {
+                    if ($debugMode) $debugInfo .= "Could not get users. ";
+                }
+                
+                // Create ticket for the found client
                 $ticketData = [
-                    'clientId' => (int)$foundClient['id'],
                     'subject' => 'Support Request: ' . substr($concern, 0, 100),
-                    'status' => 0
+                    'clientId' => (int)$foundClient['id']
                 ];
+                
+                // Add assignedUserId if available
+                if ($assignedUserId) {
+                    $ticketData['assignedUserId'] = $assignedUserId;
+                }
                 
                 if ($debugMode) $debugInfo .= "Creating ticket with: " . json_encode($ticketData) . "... ";
                 
