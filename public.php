@@ -75,39 +75,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $clientName = 'Account #' . $accountNumber;
                 }
                 
-                // Create ticket for the found client
+                // Create ticket for the found client with message included
                 $ticketData = [
                     'clientId' => (int)$foundClient['id'],
-                    'subject' => 'Support Request from ' . $clientName
+                    'subject' => 'Support Request from ' . $clientName,
+                    'emailFromAddress' => $foundClient['contacts'][0]['email'] ?? null,
+                    'message' => $concern
                 ];
                 
-                if ($debugMode) $debugInfo .= "Creating ticket... ";
-                $response = $api->post('ticketing/tickets', $ticketData);
-                if ($debugMode) $debugInfo .= "Response: " . json_encode($response) . ". ";
+                // Remove null values
+                $ticketData = array_filter($ticketData, function($v) { return $v !== null; });
                 
-                if (isset($response['id'])) {
-                    // Add the concern as a comment/activity to the ticket
-                    $ticketId = $response['id'];
-                    
+                if ($debugMode) $debugInfo .= "Creating ticket with data: " . json_encode($ticketData) . "... ";
+                
+                $response = null;
+                $ticketCreated = false;
+                
+                // Try different API endpoints
+                $endpoints = ['ticketing/tickets', 'tickets'];
+                
+                foreach ($endpoints as $endpoint) {
                     try {
-                        $commentData = [
-                            'public' => true,
-                            'body' => $concern
-                        ];
-                        $api->post('ticketing/tickets/' . $ticketId . '/comments', $commentData);
-                    } catch (Exception $commentError) {
-                        // Try alternative field name
-                        try {
-                            $commentData = [
-                                'public' => true,
-                                'content' => $concern
-                            ];
-                            $api->post('ticketing/tickets/' . $ticketId . '/comments', $commentData);
-                        } catch (Exception $e2) {
-                            // Comment failed but ticket was created
-                            if ($debugMode) $debugInfo .= "Comment error: " . $e2->getMessage() . ". ";
+                        if ($debugMode) $debugInfo .= "Trying endpoint: $endpoint... ";
+                        $response = $api->post($endpoint, $ticketData);
+                        if (isset($response['id'])) {
+                            $ticketCreated = true;
+                            break;
                         }
+                    } catch (Exception $endpointError) {
+                        if ($debugMode) $debugInfo .= "Endpoint $endpoint failed: " . $endpointError->getMessage() . ". ";
                     }
+                }
+                
+                if ($ticketCreated && isset($response['id'])) {
+                    $ticketId = $response['id'];
+                    if ($debugMode) $debugInfo .= "Ticket created! ID: $ticketId. ";
                     
                     $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . $ticketId;
                     $messageType = 'success';
@@ -115,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $accountNumber = '';
                     $concern = '';
                 } else {
-                    $message = $debugMode ? 'Failed to create ticket. Response: ' . json_encode($response) : 'Failed to create ticket. Please try again.';
+                    $message = $debugMode ? 'Failed to create ticket. Last response: ' . json_encode($response) : 'Failed to create ticket. Please try again.';
                     $messageType = 'error';
                 }
             }
