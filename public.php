@@ -6,6 +6,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Ubnt\UcrmPluginSdk\Service\UcrmApi;
 use Ubnt\UcrmPluginSdk\Service\UcrmOptionsManager;
+use Ubnt\UcrmPluginSdk\Service\PluginConfigManager;
 
 // Debug mode - set to false for production to hide sensitive data
 $debugMode = false;
@@ -14,10 +15,53 @@ $debugInfo = '';
 $api = null;
 $apiError = '';
 
+// Load plugin configuration for reCAPTCHA keys
+$config = [];
+try {
+    $configManager = PluginConfigManager::create();
+    $config = $configManager->loadConfig();
+} catch (Exception $e) {
+    // Config not available
+}
+
+$recaptchaSiteKey = $config['recaptchaSiteKey'] ?? '';
+$recaptchaSecretKey = $config['recaptchaSecretKey'] ?? '';
+
 try {
     $api = UcrmApi::create();
 } catch (Exception $e) {
     $apiError = 'API Init Error: ' . $e->getMessage();
+}
+
+// Function to verify reCAPTCHA
+function verifyRecaptcha($secretKey, $response) {
+    if (empty($secretKey) || empty($response)) {
+        return false;
+    }
+    
+    $url = 'https://www.google.com/recaptcha/api/siteverify';
+    $data = [
+        'secret' => $secretKey,
+        'response' => $response
+    ];
+    
+    $options = [
+        'http' => [
+            'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+            'method' => 'POST',
+            'content' => http_build_query($data)
+        ]
+    ];
+    
+    $context = stream_context_create($options);
+    $result = @file_get_contents($url, false, $context);
+    
+    if ($result === false) {
+        return false;
+    }
+    
+    $responseData = json_decode($result, true);
+    return isset($responseData['success']) && $responseData['success'] === true;
 }
 
 $message = '';
@@ -34,10 +78,14 @@ if (isset($_GET['success']) && isset($_GET['ticket'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountNumber = trim($_POST['account_number'] ?? '');
     $concern = trim($_POST['concern'] ?? '');
+    $recaptchaResponse = $_POST['g-recaptcha-response'] ?? '';
     
     // Check if API is available
     if ($api === null) {
         $message = $debugMode ? $apiError : 'System temporarily unavailable. Please try again later.';
+        $messageType = 'error';
+    } elseif (!empty($recaptchaSecretKey) && !verifyRecaptcha($recaptchaSecretKey, $recaptchaResponse)) {
+        $message = 'Please complete the CAPTCHA verification.';
         $messageType = 'error';
     } elseif (empty($accountNumber)) {
         $message = 'Account Number is required.';
@@ -138,6 +186,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Submit Support Ticket</title>
+    <?php if (!empty($recaptchaSiteKey)): ?>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <?php endif; ?>
     <style>
         * {
             margin: 0;
@@ -422,6 +473,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <span id="currentChars">0</span> / 1000 characters
                         </div>
                     </div>
+                    
+                    <?php if (!empty($recaptchaSiteKey)): ?>
+                    <div class="form-group">
+                        <div class="g-recaptcha" data-sitekey="<?= htmlspecialchars($recaptchaSiteKey) ?>"></div>
+                    </div>
+                    <?php endif; ?>
                     
                     <button type="submit" class="submit-btn" id="submitBtn">
                         <span id="btnText">Submit Ticket</span>
