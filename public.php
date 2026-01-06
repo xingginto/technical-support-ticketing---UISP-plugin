@@ -7,8 +7,8 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Ubnt\UcrmPluginSdk\Service\UcrmApi;
 use Ubnt\UcrmPluginSdk\Service\UcrmOptionsManager;
 
-// Debug mode - set to true to see detailed errors
-$debugMode = true;
+// Debug mode - set to false for production to hide sensitive data
+$debugMode = false;
 $debugInfo = '';
 
 $api = null;
