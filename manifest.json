@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "information": {
+    "name": "technical-support-ticketing",
+    "displayName": "Technical Support Ticketing",
+    "description": "Public ticket submission system allowing customers to submit support tickets using their Account Number (Custom ID).",
+    "url": "",
+    "version": "1.0.0",
+    "ucrmVersionCompliancy": {
+      "min": "2.14.0",
+      "max": null
+    },
+    "unmsVersionCompliancy": {
+      "min": "1.0.0",
+      "max": null
+    },
+    "author": "MCBROAD"
+  },
+  "menu": [
+    {
+      "key": "Reports",
+      "label": "Support Ticketing",
+      "type": "admin",
+      "target": "iframe"
+    }
+  ],
+  "public": [
+    {
+      "label": "Submit Ticket",
+      "url": "public.php"
+    }
+  ],
+  "configuration": []
+}
