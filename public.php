@@ -25,6 +25,12 @@ $messageType = '';
 $accountNumber = '';
 $concern = '';
 
+// Check for success message from redirect (PRG pattern)
+if (isset($_GET['success']) && isset($_GET['ticket'])) {
+    $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . htmlspecialchars($_GET['ticket']);
+    $messageType = 'success';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountNumber = trim($_POST['account_number'] ?? '');
     $concern = trim($_POST['concern'] ?? '');
@@ -96,13 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 if (isset($response['id'])) {
                     $ticketId = $response['id'];
-                    if ($debugMode) $debugInfo .= "Ticket #$ticketId created successfully! ";
                     
-                    $message = 'Your support ticket has been submitted successfully! Ticket ID: #' . $ticketId;
-                    $messageType = 'success';
-                    // Clear form on success
-                    $accountNumber = '';
-                    $concern = '';
+                    // Redirect to prevent form resubmission (PRG pattern)
+                    $redirectUrl = strtok($_SERVER['REQUEST_URI'], '?') . '?success=1&ticket=' . $ticketId;
+                    header('Location: ' . $redirectUrl);
+                    exit;
                 } else {
                     $message = $debugMode ? 'Failed to create ticket. Response: ' . json_encode($response) : 'Failed to create ticket. Please try again.';
                     $messageType = 'error';
