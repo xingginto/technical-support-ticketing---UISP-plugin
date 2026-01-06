@@ -5,8 +5,20 @@ declare(strict_types=1);
 require_once __DIR__ . '/vendor/autoload.php';
 
 use Ubnt\UcrmPluginSdk\Service\UcrmApi;
+use Ubnt\UcrmPluginSdk\Service\UcrmOptionsManager;
 
-$api = UcrmApi::create();
+// Debug mode - set to true to see detailed errors
+$debugMode = true;
+$debugInfo = '';
+
+$api = null;
+$apiError = '';
+
+try {
+    $api = UcrmApi::create();
+} catch (Exception $e) {
+    $apiError = 'API Init Error: ' . $e->getMessage();
+}
 
 $message = '';
 $messageType = '';
@@ -17,8 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountNumber = trim($_POST['account_number'] ?? '');
     $concern = trim($_POST['concern'] ?? '');
     
-    // Validate inputs
-    if (empty($accountNumber)) {
+    // Check if API is available
+    if ($api === null) {
+        $message = $debugMode ? $apiError : 'System temporarily unavailable. Please try again later.';
+        $messageType = 'error';
+    } elseif (empty($accountNumber)) {
         $message = 'Account Number is required.';
         $messageType = 'error';
     } elseif (empty($concern)) {
@@ -30,7 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         // Search for client by Custom ID (userIdent)
         try {
+            if ($debugMode) $debugInfo .= "Fetching clients... ";
             $clients = $api->get('clients');
+            if ($debugMode) $debugInfo .= "Got " . count($clients) . " clients. ";
+            
             $foundClient = null;
             
             foreach ($clients as $client) {
@@ -45,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = 'Account number cannot be found.';
                 $messageType = 'error';
             } else {
+                if ($debugMode) $debugInfo .= "Found client ID: " . $foundClient['id'] . ". ";
+                
                 // Get client name for subject
                 $clientName = '';
                 if (!empty($foundClient['firstName']) || !empty($foundClient['lastName'])) {
@@ -61,7 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'subject' => 'Support Request from ' . $clientName
                 ];
                 
+                if ($debugMode) $debugInfo .= "Creating ticket... ";
                 $response = $api->post('ticketing/tickets', $ticketData);
+                if ($debugMode) $debugInfo .= "Response: " . json_encode($response) . ". ";
                 
                 if (isset($response['id'])) {
                     // Add the concern as a comment/activity to the ticket
@@ -83,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $api->post('ticketing/tickets/' . $ticketId . '/comments', $commentData);
                         } catch (Exception $e2) {
                             // Comment failed but ticket was created
+                            if ($debugMode) $debugInfo .= "Comment error: " . $e2->getMessage() . ". ";
                         }
                     }
                     
@@ -92,19 +115,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $accountNumber = '';
                     $concern = '';
                 } else {
-                    $message = 'Failed to create ticket. Please try again.';
+                    $message = $debugMode ? 'Failed to create ticket. Response: ' . json_encode($response) : 'Failed to create ticket. Please try again.';
                     $messageType = 'error';
                 }
             }
         } catch (Exception $e) {
             $errorMsg = $e->getMessage();
-            // Show more helpful error for debugging
-            if (strpos($errorMsg, '404') !== false) {
-                $message = 'Ticketing system not available. Please contact support.';
-            } elseif (strpos($errorMsg, '401') !== false || strpos($errorMsg, '403') !== false) {
-                $message = 'Permission denied. Please contact support.';
+            if ($debugMode) {
+                $message = 'Error: ' . $errorMsg;
             } else {
-                $message = 'An error occurred. Please try again later.';
+                // Show more helpful error for production
+                if (strpos($errorMsg, '404') !== false) {
+                    $message = 'Ticketing system not available. Please contact support.';
+                } elseif (strpos($errorMsg, '401') !== false || strpos($errorMsg, '403') !== false) {
+                    $message = 'Permission denied. Please contact support.';
+                } else {
+                    $message = 'An error occurred. Please try again later.';
+                }
             }
             $messageType = 'error';
         }
@@ -360,6 +387,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="message <?= $messageType ?>">
                         <span class="message-icon"><?= $messageType === 'success' ? '✅' : '❌' ?></span>
                         <span><?= htmlspecialchars($message) ?></span>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if ($debugMode && $debugInfo): ?>
+                    <div class="message" style="background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc;">
+                        <span class="message-icon">🔍</span>
+                        <span style="font-size: 12px; word-break: break-all;"><?= htmlspecialchars($debugInfo) ?></span>
                     </div>
                 <?php endif; ?>
                 
