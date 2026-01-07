@@ -153,6 +153,10 @@ For plugin-related issues:
 - Check UISP documentation
 - Verify system requirements
 
+## Author
+
+**xingginto**
+
 ## License
 
 MIT License
